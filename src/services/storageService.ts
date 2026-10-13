@@ -14,7 +14,6 @@ import {
 import { db, handleFirestoreError, OperationType } from './firebase';
 import { InterviewRecord, RoteiroType } from '../types/validation';
 import { INITIAL_SEED_INTERVIEWS } from '../data/cadernoData';
-import { isRecordStale, getDaysSinceLastUpdate } from '../utils/reminderUtils';
 
 const STORAGE_CACHE_KEY = 'hiperreforco_validation_crm_v1';
 const CRM_COLLECTION = 'validacao_entrevistas';
@@ -35,16 +34,16 @@ export function getStoredInterviews(): InterviewRecord[] {
   }
 }
 
-function removeUndefinedFields(obj: any): any {
+export function removerIndefinidos(obj: any): any {
   if (!obj || typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) {
-    return obj.map(removeUndefinedFields);
+    return obj.map(removerIndefinidos);
   }
   const cleaned: any = {};
   for (const key of Object.keys(obj)) {
     const val = obj[key];
     if (val !== undefined) {
-      cleaned[key] = removeUndefinedFields(val);
+      cleaned[key] = removerIndefinidos(val);
     }
   }
   return cleaned;
@@ -53,7 +52,7 @@ function removeUndefinedFields(obj: any): any {
 export async function saveInterviewToFirestore(record: InterviewRecord): Promise<void> {
   const path = `${CRM_COLLECTION}/${record.id}`;
   try {
-    const cleaned = removeUndefinedFields({ ...record, updatedAt: serverTimestamp() });
+    const cleaned = removerIndefinidos({ ...record, updatedAt: serverTimestamp() });
     await setDoc(doc(db, CRM_COLLECTION, record.id), cleaned, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -86,7 +85,7 @@ export function subscribeToPublicSubmissions(onUpdate: (submissions: InterviewRe
 
 export async function submitPublicFormToFirestore(record: InterviewRecord, token?: string): Promise<void> {
   try {
-    const cleaned = removeUndefinedFields({ ...record, token, submittedAt: serverTimestamp() });
+    const cleaned = removerIndefinidos({ ...record, token, submittedAt: serverTimestamp() });
     await setDoc(doc(db, RESPOSTAS_COLLECTION, record.id), cleaned);
     if (token) await consumeValidationToken(token, record.id);
   } catch (error) {
@@ -103,8 +102,12 @@ export interface ValidationTokenData {
 }
 
 export async function createValidationToken(roteiro: RoteiroType): Promise<string> {
-  const token = `hr_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
-  await setDoc(doc(db, TOKENS_COLLECTION, token), { token, roteiro, status: 'pendente', usado: false, criadoEm: new Date().toISOString() });
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  const randomHex = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  const token = `hr_${randomHex}`;
+  const data = removerIndefinidos({ token, roteiro, status: 'pendente', usado: false, criadoEm: new Date().toISOString() });
+  await setDoc(doc(db, TOKENS_COLLECTION, token), data);
   return token;
 }
 
@@ -116,7 +119,8 @@ export async function verifyValidationToken(token: string): Promise<{ valid: boo
 }
 
 export async function consumeValidationToken(token: string, submissionId: string): Promise<void> {
-  await updateDoc(doc(db, TOKENS_COLLECTION, token), { usado: true, status: 'consumido', consumidoEm: serverTimestamp(), respostaId: submissionId });
+  const data = removerIndefinidos({ usado: true, status: 'consumido', consumidoEm: serverTimestamp(), respostaId: submissionId });
+  await updateDoc(doc(db, TOKENS_COLLECTION, token), data);
 }
 
 export async function listValidationTokens(): Promise<ValidationTokenData[]> {
@@ -125,7 +129,6 @@ export async function listValidationTokens(): Promise<ValidationTokenData[]> {
 }
 
 export function exportToCsvUtf8Bom(interviews: InterviewRecord[]): void {
-  // Mantida interface original de exportação
   const headers = ['ID', 'Data', 'Município', 'Escola/Órgão', 'Perfil', 'Nome', 'Status', 'Veredito Geral'];
   const rows = interviews.map(i => [i.id, i.date, i.municipio, i.escolaOrOrgao, i.entrevistadoPerfil, i.entrevistadoNome, i.status, i.vereditoGeral].join(';'));
   const blob = new Blob(['\uFEFF' + [headers.join(';'), ...rows].join('\r\n')], { type: 'text/csv;charset=utf-8;' });
