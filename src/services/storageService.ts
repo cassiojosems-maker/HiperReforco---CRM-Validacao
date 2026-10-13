@@ -35,10 +35,26 @@ export function getStoredInterviews(): InterviewRecord[] {
   }
 }
 
+function removeUndefinedFields(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefinedFields);
+  }
+  const cleaned: any = {};
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (val !== undefined) {
+      cleaned[key] = removeUndefinedFields(val);
+    }
+  }
+  return cleaned;
+}
+
 export async function saveInterviewToFirestore(record: InterviewRecord): Promise<void> {
   const path = `${CRM_COLLECTION}/${record.id}`;
   try {
-    await setDoc(doc(db, CRM_COLLECTION, record.id), { ...record, updatedAt: serverTimestamp() }, { merge: true });
+    const cleaned = removeUndefinedFields({ ...record, updatedAt: serverTimestamp() });
+    await setDoc(doc(db, CRM_COLLECTION, record.id), cleaned, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -70,7 +86,8 @@ export function subscribeToPublicSubmissions(onUpdate: (submissions: InterviewRe
 
 export async function submitPublicFormToFirestore(record: InterviewRecord, token?: string): Promise<void> {
   try {
-    await setDoc(doc(db, RESPOSTAS_COLLECTION, record.id), { ...record, token, submittedAt: serverTimestamp() });
+    const cleaned = removeUndefinedFields({ ...record, token, submittedAt: serverTimestamp() });
+    await setDoc(doc(db, RESPOSTAS_COLLECTION, record.id), cleaned);
     if (token) await consumeValidationToken(token, record.id);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, RESPOSTAS_COLLECTION);
