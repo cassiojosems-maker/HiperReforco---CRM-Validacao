@@ -10,6 +10,8 @@ import {
   RotateCcw,
   Sparkles,
   Video,
+  LogOut,
+  UserCheck,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -21,6 +23,8 @@ interface HeaderProps {
   onExportJson: () => void;
   onResetSeed: () => void;
   totalInterviews: number;
+  currentUser?: { email?: string | null; displayName?: string | null; photoURL?: string | null } | null;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -32,6 +36,8 @@ export const Header: React.FC<HeaderProps> = ({
   onExportJson,
   onResetSeed,
   totalInterviews,
+  currentUser,
+  onLogout,
 }) => {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md">
@@ -181,6 +187,27 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Usuário Logado e Logout */}
+            {currentUser && onLogout && (
+              <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+                <div className="hidden sm:flex flex-col text-right">
+                  <span className="text-[11px] font-bold text-white leading-tight truncate max-w-[140px]">
+                    {currentUser.displayName || currentUser.email?.split('@')[0]}
+                  </span>
+                  <span className="text-[9px] font-mono text-emerald-400">
+                    Autorizado (Allowlist)
+                  </span>
+                </div>
+                <button
+                  onClick={onLogout}
+                  className="flex items-center justify-center h-8 w-8 rounded-lg border border-slate-700 bg-slate-800 hover:bg-rose-950/50 hover:border-rose-700/60 text-slate-400 hover:text-rose-300 transition-colors"
+                  title={`Sair da conta (${currentUser.email})`}
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

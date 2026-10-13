@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
 import { RoteiroType, InterviewRecord } from '../types/validation';
 import { ROTEIROS_CONFIG } from '../data/cadernoData';
+import { submitPublicFormToFirestore } from '../services/storageService';
 import {
   Sparkles,
   Send,
   CheckCircle2,
-  ShieldCheck,
   Building2,
   MapPin,
   User,
   Phone,
   HelpCircle,
   Briefcase,
-  Lock,
+  AlertTriangle,
   Users,
   GraduationCap,
   Landmark,
@@ -20,28 +20,46 @@ import {
   Heart,
   Baby,
   School,
+  FileText,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface PublicRespondentViewProps {
   initialRoteiro?: RoteiroType;
+  token?: string;
   onSubmit: (record: InterviewRecord) => Promise<void> | void;
   onAdminReturn?: () => void;
 }
 
 export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
   initialRoteiro = 'A',
+  token,
   onSubmit,
   onAdminReturn,
 }) => {
-  const [selectedRoteiro, setSelectedRoteiro] = useState<RoteiroType>(initialRoteiro);
+  const [selectedRoteiro] = useState<RoteiroType>(initialRoteiro);
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // 2.5 - Termo de Consentimento Obrigatório antes de qualquer campo
+  const [consentAccepted, setConsentAccepted] = useState<boolean>(false);
+  const [consentTimestamp, setConsentTimestamp] = useState<string | null>(null);
+  const CONSENT_VERSION = 'v1.0';
+
+  const handleConsentChange = (checked: boolean) => {
+    setConsentAccepted(checked);
+    if (checked) {
+      setConsentTimestamp(new Date().toISOString());
+    } else {
+      setConsentTimestamp(null);
+    }
+  };
 
   // Perfil identificado pelo Roteiro
   const isFamily = selectedRoteiro === 'D' || selectedRoteiro === 'E';
   const isClinic = selectedRoteiro === 'G';
   const isManagement = selectedRoteiro === 'B';
-  const isTeacher = selectedRoteiro === 'A' || selectedRoteiro === 'C';
 
   // Campos Gerais
   const [nome, setNome] = useState('');
@@ -50,11 +68,10 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
   const [pagouBolso, setPagouBolso] = useState(false);
   const [valorBolso, setValorBolso] = useState('');
 
-  // Campos Específicos para Famílias (Roteiros D e E)
+  // 2.6 - Famílias (Roteiros D e E): apenas faixa de idade; diagnóstico/perfil removido
   const [parentesco, setParentesco] = useState('Mãe');
   const [parentescoCustom, setParentescoCustom] = useState('');
-  const [idadeFilhoOuAno, setIdadeFilhoOuAno] = useState('');
-  const [diagnosticoFilho, setDiagnosticoFilho] = useState('');
+  const [faixaEtaria, setFaixaEtaria] = useState<'até 6' | '7 a 10' | '11 a 14' | '15 ou mais'>('7 a 10');
   const [tipoEscolaFilho, setTipoEscolaFilho] = useState('Escola Pública Municipal');
   const [tipoEscolaCustom, setTipoEscolaCustom] = useState('');
 
@@ -77,7 +94,13 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!consentAccepted) {
+      setSubmitError('É obrigatório ler e aceitar o Termo de Consentimento antes de enviar.');
+      return;
+    }
+
     setIsSubmitting(true);
+    setSubmitError(null);
 
     try {
       const nonBlankAnswers = Object.values(answers).filter((a) => a.trim().length > 0);
@@ -91,13 +114,14 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
         : (escolaOrOrgao.trim() || (isClinic ? 'Clínica Informada' : (isManagement ? 'Secretaria Informada' : 'Escola Informada')));
 
       const recordPerfil = isFamily
-        ? `${finalParentesco} de estudante (${idadeFilhoOuAno.trim() || 'Idade não informada'}${diagnosticoFilho.trim() ? ` · ${diagnosticoFilho.trim()}` : ''})`
+        ? `${finalParentesco} de estudante (Faixa: ${faixaEtaria})`
         : (perfil.trim() || roteiroConfig.targetAudience);
 
       const recordNome = nome.trim() || (isFamily ? `${finalParentesco} (${municipio})` : 'Respondente Anônimo');
 
+      const submissionId = `resp_${Date.now()}`;
       const newRecord: InterviewRecord = {
-        id: `form_${Date.now()}`,
+        id: submissionId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         date: new Date().toISOString().slice(0, 10),
@@ -109,20 +133,18 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
         contato: contato.trim(),
         roteiro: selectedRoteiro,
         canal: roteiroConfig.canal,
-        status: 'agendado', // Entra como lead pronto para análise no CRM
+        status: 'agendado', // Submissão entra para revisão no CRM
         
-        // Identificação estruturada por perfil
         tipoPerfilIdentificacao: isFamily ? 'familia' : (isClinic ? 'clinica' : (isManagement ? 'gestao' : 'docente')),
         parentesco: isFamily ? finalParentesco : undefined,
-        idadeFilhoOuAno: isFamily ? idadeFilhoOuAno.trim() : undefined,
-        diagnosticoOuPerfilFilho: isFamily ? diagnosticoFilho.trim() : undefined,
+        idadeFilhoOuAno: isFamily ? faixaEtaria : undefined,
         tipoEscolaFilho: isFamily ? finalEscolaFilho : undefined,
         funcaoOuCargo: !isFamily ? perfil.trim() : undefined,
         tempoExperiencia: !isFamily ? tempoDeCasa.trim() : undefined,
 
-        entrevistador: 'Formulário Externo Web',
-        anotador: 'Submissão Autônoma do Respondente',
-        duracaoMinutos: isFamily ? 12 : 15,
+        entrevistador: 'Formulário Externo Tokenizado',
+        anotador: 'Submissão Autônoma',
+        duracaoMinutos: isFamily ? 10 : 15,
         checklistProgress: Object.keys(answers).reduce((acc, k) => {
           acc[k] = true;
           return acc;
@@ -138,109 +160,76 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
             : selectedRoteiro === 'D'
             ? ['H6', 'H1']
             : ['H1', 'H2', 'H5'],
-        frasesTextuais: extractedQuotes.length > 0 ? extractedQuotes : ['"Resposta registrada via questionário web direto."'],
+        frasesTextuais: extractedQuotes.length > 0 ? extractedQuotes : ['"Resposta registrada via formulário web."'],
         oQueSurpreendeu: isFamily
-          ? 'Perspectiva familiar recebida sobre custos e rotina de apoio aos estudos.'
-          : 'Submissão assíncrona recebida através do formulário de campo público.',
+          ? 'Perspectiva familiar sobre rotinas e apoio à aprendizagem.'
+          : 'Submissão assíncrona recebida através do formulário de campo.',
         tentouResolver: answers[`${selectedRoteiro}1_3`] || answers[`${selectedRoteiro}2_1`] || 'Relatado no formulário.',
         pagouDoProprioBolso: pagouBolso,
         valorPagoDoProprioBolso: valorBolso.trim(),
         vereditosPorHipotese: {},
         vereditoGeral: 'pendente',
         vereditoMotivoGeral: 'Aguardando auditoria do pesquisador no CRM.',
-        proximosPassos: 'Revisar notas da submissão e realizar follow-up se contato foi fornecido.',
+        proximosPassos: 'Revisar respostas e realizar follow-up se contato foi fornecido.',
         tags: [
           'Formulário Externo',
           `Roteiro-${selectedRoteiro}`,
-          isFamily ? 'Família & Aluno' : (roteiroConfig.canal === 'saude' ? 'Eixo Saúde' : 'Eixo Educação')
+          isFamily ? 'Família & Aluno' : (roteiroConfig.canal === 'saude' ? 'Eixo Saúde' : 'Eixo Educação'),
+          token ? `Token-${token}` : 'Tokenizado'
         ],
         isExterna: true,
       };
 
-      // Envia para o servidor backend para persistência e sincronização entre dispositivos
-      try {
-        await fetch('/api/forms/submit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newRecord),
-        });
-      } catch (postErr) {
-        console.warn('Persistência local mantida, erro ao sincronizar com backend:', postErr);
-      }
+      // 2.1 e 2.4: Grava diretamente na coleção validacao_respostas do Firestore e consome o token
+      await submitPublicFormToFirestore(
+        {
+          ...newRecord,
+          // Registra o consentimento explicitamente
+          termoConsentimento: {
+            aceito: true,
+            dataHoraAceite: consentTimestamp || new Date().toISOString(),
+            versaoTermo: CONSENT_VERSION,
+            controlador: '[CONTROLADOR_AQUI]',
+            encarregadoEmail: '[EMAIL_ENCARREGADO_AQUI]',
+          },
+        } as any,
+        token
+      );
 
+      // Notifica callback do App
       await onSubmit(newRecord);
       setIsSubmitted(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao enviar formulário:', err);
+      setSubmitError('Não foi possível gravar sua resposta no momento. Por favor, tente novamente em instantes.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleReset = () => {
-    setIsSubmitted(false);
-    setAnswers({});
-    setNome('');
-    setEscolaOrOrgao('');
-    setPerfil('');
-    setTempoDeCasa('');
-    setContato('');
-    setIdadeFilhoOuAno('');
-    setDiagnosticoFilho('');
-    setPagouBolso(false);
-    setValorBolso('');
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-['Plus_Jakarta_Sans',sans-serif]">
-      {/* Topo Limpo e Institucional - Sem nenhum botão ou menu de CRM */}
-      <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-20">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6 py-4 flex items-center justify-between">
+      {/* Header Limpo */}
+      <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br shadow-md ${
-              isFamily
-                ? 'from-pink-500 via-rose-600 to-purple-600 shadow-pink-500/20'
-                : isClinic
-                ? 'from-teal-500 via-emerald-600 to-cyan-700 shadow-teal-500/20'
-                : isManagement
-                ? 'from-amber-500 via-orange-600 to-amber-700 shadow-amber-500/20'
-                : 'from-indigo-500 via-indigo-600 to-purple-600 shadow-indigo-500/20'
-            }`}>
-              {isFamily ? (
-                <Users className="h-5 w-5 text-white" />
-              ) : isClinic ? (
-                <Stethoscope className="h-5 w-5 text-white" />
-              ) : isManagement ? (
-                <Landmark className="h-5 w-5 text-white" />
-              ) : (
-                <Sparkles className="h-5 w-5 text-white" />
-              )}
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white font-black text-sm shadow-md shadow-indigo-500/20">
+              HR
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold tracking-tight text-white text-base sm:text-lg">
-                  Hiper<span className={isFamily ? 'text-pink-400' : isClinic ? 'text-teal-400' : 'text-indigo-400'}>Reforço</span>
-                </span>
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                  isFamily
-                    ? 'bg-pink-950/70 border-pink-700/60 text-pink-300'
-                    : 'bg-emerald-950 border border-emerald-700/60 text-emerald-300'
-                }`}>
-                  {isFamily ? 'Pesquisa com Famílias' : 'Pesquisa de Campo'}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400">
-                {isFamily
-                  ? 'Apoio Prático à Aprendizagem e Potencialidades da Criança'
-                  : 'Inovação Educacional & Apoio Prático à Neurodiversidade'}
-              </p>
+              <span className="text-sm font-extrabold text-white tracking-tight">
+                HiperReforço
+              </span>
+              <span className="block text-[10px] text-slate-400 font-medium">
+                Pesquisa & Validação de Campo
+              </span>
             </div>
           </div>
-
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
-            <Lock className="h-3.5 w-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">Ambiente Seguro & Sigiloso</span>
-          </div>
+          {token && (
+            <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-2.5 py-1 rounded-full border border-slate-700">
+              Convite Individual Ativo
+            </span>
+          )}
         </div>
       </header>
 
@@ -248,51 +237,52 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
       <main className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
         {isSubmitted ? (
           /* Tela de Agradecimento e Confirmação */
-          <div className="rounded-2xl border border-emerald-500/40 bg-gradient-to-b from-slate-900 to-emerald-950/20 p-8 sm:p-12 text-center space-y-6 shadow-2xl animate-fade-in">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/20 border border-emerald-500/60 text-emerald-300 shadow-lg shadow-emerald-950">
-              <CheckCircle2 className="h-10 w-10 text-emerald-400" />
+          <div className="rounded-3xl border border-emerald-500/30 bg-slate-900/90 p-8 sm:p-12 text-center space-y-6 shadow-2xl">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-950/80 border border-emerald-700/60 text-emerald-400 shadow-xl shadow-emerald-950/50">
+              <CheckCircle2 className="h-10 w-10" />
             </div>
 
             <div className="space-y-2">
-              <span className="rounded-full bg-emerald-900/60 border border-emerald-600/60 px-3 py-1 text-xs font-bold text-emerald-300 uppercase tracking-wider">
-                Submissão Confirmada
+              <span className="rounded-full bg-emerald-950 px-3 py-1 text-xs font-mono font-bold text-emerald-300 uppercase border border-emerald-800">
+                Respostas Registradas com Sucesso
               </span>
-              <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                 Muito Obrigado pela Sua Participação!
-              </h2>
-              <p className="text-sm text-slate-300 max-w-lg mx-auto leading-relaxed pt-2">
-                {isFamily
-                  ? 'Sua resposta foi gravada com sucesso. A visão de quem acompanha a criança em casa todos os dias é o alicerce fundamental para desenharmos estratégias que respeitem o ritmo e os interesses reais do seu filho(a).'
-                  : 'Sua resposta foi gravada com sucesso. A sua experiência prática na linha de frente é indispensável para construir soluções verdadeiramente ancoradas na realidade de educadores, terapeutas e redes de ensino.'}
+              </h1>
+              <p className="text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
+                Suas contribuições práticas foram armazenadas na base de validação e nos ajudarão a estruturar soluções mais adequadas para a inclusão escolar.
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 text-xs text-slate-400 max-w-md mx-auto text-left space-y-1">
-              <p className="font-semibold text-slate-300 flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-emerald-400" /> Compromisso Metodológico:
-              </p>
-              <p>
-                Os dados fornecidos são sigilosos e destinados exclusivamente ao mapeamento de necessidades educacionais reais, sem qualquer finalidade comercial.
-              </p>
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-5 text-left text-xs text-slate-400 max-w-md mx-auto space-y-2">
+              <div className="flex justify-between">
+                <span>Roteiro de Campo:</span>
+                <span className="font-bold text-white">Roteiro {selectedRoteiro} ({roteiroConfig.title})</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Data de Envio:</span>
+                <span className="font-mono text-slate-300">{new Date().toLocaleString('pt-BR')}</span>
+              </div>
+              {token && (
+                <div className="flex justify-between">
+                  <span>Status do Convite:</span>
+                  <span className="font-mono text-emerald-400">Consumido (Uso Único Concluído)</span>
+                </div>
+              )}
             </div>
 
-            <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={handleReset}
-                className="w-full sm:w-auto rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-6 py-2.5 text-xs font-bold text-slate-200 transition-colors"
-              >
-                Enviar Outra Resposta
-              </button>
+            <div className="pt-4">
+              <p className="text-xs text-slate-500">
+                Você pode fechar esta janela com segurança.
+              </p>
             </div>
           </div>
         ) : (
-          /* Formulário de Resposta para o Entrevistado */
-          <div className="space-y-6">
-            {/* Apresentação Ética e Objetiva */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 sm:p-8 shadow-xl space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+          <div className="space-y-8">
+            {/* Introdução e Contextualização */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className={`rounded-lg px-2.5 py-0.5 text-xs font-bold font-mono border ${
                   isFamily
                     ? 'bg-pink-950 border-pink-700/60 text-pink-300'
                     : isClinic
@@ -304,7 +294,7 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
                   {roteiroConfig.title}
                 </span>
                 <span className="text-xs text-slate-400">
-                  Tempo estimado: ~4 a 7 minutos
+                  Tempo estimado: ~4 a 6 minutos
                 </span>
               </div>
 
@@ -314,45 +304,76 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
                   : `Questionário de Campo: ${roteiroConfig.targetAudience}`}
               </h1>
 
-              <div className={`rounded-xl border p-4 text-xs leading-relaxed space-y-2 ${
-                isFamily
-                  ? 'border-pink-500/20 bg-pink-950/20 text-slate-200'
-                  : 'border-indigo-500/20 bg-indigo-950/30 text-slate-300'
-              }`}>
-                <p className={`font-semibold flex items-center gap-1.5 ${isFamily ? 'text-pink-200' : 'text-indigo-200'}`}>
-                  <ShieldCheck className={`h-4 w-4 shrink-0 ${isFamily ? 'text-pink-400' : 'text-indigo-400'}`} />
-                  Pesquisa Independente Needs-First (Sem Intuito Comercial)
-                </p>
-                <p>
-                  {isFamily
-                    ? 'Estamos ouvindo famílias para entender a rotina real de estudos em casa, os desafios no dia a dia com a escola e o que realmente funciona para apoiar a aprendizagem. Não estamos vendendo materiais, assinaturas ou cursos.'
-                    : 'Estamos investigando os desafios e a rotina de quem atua no apoio e desenvolvimento de crianças neurodivergentes. Não estamos vendendo produtos nem serviços. Queremos ouvir fatos e comportamentos da sua prática diária real.'}
-                </p>
-              </div>
-
-              {roteiroConfig.regulatoryNotice && (
-                <div className="rounded-xl border border-teal-500/30 bg-teal-950/20 p-3.5 text-xs text-teal-200">
-                  <span className="font-bold">Nota de Conformidade Ética: </span>
-                  {roteiroConfig.regulatoryNotice}
-                </div>
-              )}
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {isFamily
+                  ? 'Estamos ouvindo famílias para entender a rotina real de estudos em casa e os desafios cotidianos de aprendizagem. Não estamos vendendo nenhum produto ou material.'
+                  : 'Estamos investigando os desafios e a rotina de quem atua no apoio e desenvolvimento de estudantes. Não estamos vendendo produtos nem serviços.'}
+              </p>
             </div>
 
             {/* Formulário Interativo */}
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* =======================================================
+                  2.5: CONSENTIMENTO ANTES DO PRIMEIRO CAMPO (OBRIGATÓRIO)
+                 ======================================================= */}
+              <div className="rounded-2xl border border-indigo-500/40 bg-slate-900/95 p-6 shadow-xl space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+                  <FileText className="h-5 w-5 text-indigo-400" />
+                  <h2 className="text-sm font-bold text-white">
+                    Termo de Consentimento Livre e Esclarecido ({CONSENT_VERSION}) *
+                  </h2>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950/90 p-4 text-xs text-slate-300 space-y-3 leading-relaxed max-h-56 overflow-y-auto">
+                  <p>
+                    <strong className="text-white">1. Controlador dos Dados:</strong><br />
+                    Esta pesquisa é realizada sob a responsabilidade institucional de <strong className="text-indigo-300 font-mono">[CONTROLADOR_AQUI]</strong>.
+                  </p>
+                  <p>
+                    <strong className="text-white">2. Finalidade do Levantamento:</strong><br />
+                    Os dados são coletados unicamente para levantamento de necessidades pedagógicas e rotinas práticas. O tratamento ocorre exclusivamente para uso agregado e estatístico.
+                  </p>
+                  <p>
+                    <strong className="text-white">3. Participação Voluntária:</strong><br />
+                    Sua participação é estritamente voluntária e pode ser interrompida a qualquer momento, sem qualquer prejuízo.
+                  </p>
+                  <p>
+                    <strong className="text-white">4. Direitos do Titular e Canal de Exclusão:</strong><br />
+                    O titular pode solicitar a exclusão de suas respostas a qualquer momento através do e-mail do encarregado: <strong className="text-indigo-300 font-mono">[EMAIL_ENCARREGADO_AQUI]</strong>.
+                  </p>
+                  <p>
+                    <strong className="text-white">5. Anonimização de Citações:</strong><br />
+                    Eventuais citações ou relatos textuais serão utilizados de forma estritamente anonimizada, preservando a identidade dos participantes e de seus filhos.
+                  </p>
+                </div>
+
+                <label className="flex items-start gap-3 p-3.5 rounded-xl border border-indigo-500/40 bg-indigo-950/30 hover:bg-indigo-950/50 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={consentAccepted}
+                    onChange={(e) => handleConsentChange(e.target.checked)}
+                    required
+                    className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-xs text-slate-200 font-medium leading-relaxed">
+                    Li e aceito os termos da pesquisa. Concordo voluntariamente em participar do levantamento de necessidades conforme as diretrizes descritas acima. *
+                  </span>
+                </label>
+              </div>
+
+              {/* =======================================================
                   BLOCO 1: IDENTIFICAÇÃO DINÂMICA CONFORME O PERFIL
                  ======================================================= */}
               {isFamily ? (
                 /* === PERFIL FAMÍLIA (ROTEIROS D E E) === */
-                <div className="rounded-2xl border border-pink-500/30 bg-slate-900/90 p-6 shadow-xl space-y-4">
+                <div className={`rounded-2xl border border-pink-500/30 bg-slate-900/90 p-6 shadow-xl space-y-4 transition-opacity ${!consentAccepted ? 'opacity-50 pointer-events-none' : ''}`}>
                   <div className="border-b border-slate-800 pb-2">
                     <h2 className="text-sm font-bold text-white flex items-center gap-2">
                       <Users className="h-4 w-4 text-pink-400" />
-                      1. Identificação da Família & Contexto da Criança
+                      1. Identificação da Família
                     </h2>
                     <p className="text-xs text-slate-400">
-                      Informações sobre você e sobre seu filho(a), sem termos ou burocracias escolares.
+                      Informações gerais sobre o seu contexto familiar.
                     </p>
                   </div>
 
@@ -385,18 +406,24 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
                       )}
                     </div>
 
-                    {/* Nome do Responsável */}
+                    {/* 2.6 - Faixa Etária da Criança (em substituição à idade exata e sem campo de diagnóstico) */}
                     <div>
                       <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Seu Nome (ou como prefere ser chamado/a)
+                        Faixa de Idade da Criança *
                       </label>
-                      <input
-                        type="text"
-                        value={nome}
-                        onChange={(e) => setNome(e.target.value)}
-                        placeholder="Ex: Mariana Mendes ou Carlos"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-pink-500 focus:outline-none transition-colors"
-                      />
+                      <select
+                        value={faixaEtaria}
+                        onChange={(e) => setFaixaEtaria(e.target.value as any)}
+                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none transition-colors"
+                      >
+                        <option value="até 6">até 6 anos</option>
+                        <option value="7 a 10">7 a 10 anos</option>
+                        <option value="11 a 14">11 a 14 anos</option>
+                        <option value="15 ou mais">15 ou mais anos</option>
+                      </select>
+                      <span className="block mt-1 text-[11px] text-slate-400">
+                        Classificação por faixa para preservação de privacidade.
+                      </span>
                     </div>
 
                     {/* Município e Estado */}
@@ -414,45 +441,10 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
                       />
                     </div>
 
-                    {/* Idade e Série do Filho */}
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Idade e Ano Escolar do Filho(a) *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={idadeFilhoOuAno}
-                        onChange={(e) => setIdadeFilhoOuAno(e.target.value)}
-                        placeholder="Ex: 8 anos (3º ano do Ensino Fundamental)"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-pink-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-
-                    {/* Diagnóstico / Perfil da Criança */}
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        {selectedRoteiro === 'D'
-                          ? 'Diagnóstico ou Perfil do Filho(a) (se houver)'
-                          : 'Perfil do Estudante'}
-                      </label>
-                      <input
-                        type="text"
-                        value={diagnosticoFilho}
-                        onChange={(e) => setDiagnosticoFilho(e.target.value)}
-                        placeholder={
-                          selectedRoteiro === 'D'
-                            ? 'Ex: TEA Nível 1, TDAH, Altas Habilidades, ou em investigação'
-                            : 'Ex: Aluno típico sem laudo / Dificuldade em Matemática'
-                        }
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-pink-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-
                     {/* Tipo de Escola */}
                     <div>
                       <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Tipo de Escola que Frequenta
+                        Tipo de Escola
                       </label>
                       <select
                         value={tipoEscolaFilho}
@@ -461,223 +453,64 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
                       >
                         <option value="Escola Pública Municipal">Escola Pública Municipal</option>
                         <option value="Escola Pública Estadual">Escola Pública Estadual</option>
-                        <option value="Escola Privada / Particular">Escola Privada / Particular</option>
+                        <option value="Escola Particular / Privada">Escola Particular / Privada</option>
                         <option value="Ensino Domiciliar">Ensino Domiciliar</option>
-                        <option value="Outro">Outro formato</option>
+                        <option value="Outro">Outro tipo</option>
                       </select>
-                      {tipoEscolaFilho === 'Outro' && (
-                        <input
-                          type="text"
-                          value={tipoEscolaCustom}
-                          onChange={(e) => setTipoEscolaCustom(e.target.value)}
-                          placeholder="Qual tipo de escola?"
-                          className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:border-pink-500 focus:outline-none"
-                        />
-                      )}
                     </div>
 
-                    {/* Contato Opcional */}
-                    <div className="sm:col-span-2">
+                    {/* Nome do Responsável (Opcional) */}
+                    <div>
                       <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        WhatsApp ou E-mail para contato (Opcional)
+                        Seu Nome ou Primeiro Nome (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={nome}
+                        onChange={(e) => setNome(e.target.value)}
+                        placeholder="Ex: Mariana ou Carlos (Opcional)"
+                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-pink-500 focus:outline-none transition-colors"
+                      />
+                    </div>
+
+                    {/* Contato (Opcional) */}
+                    <div>
+                      <label className="text-xs font-semibold text-slate-300 block mb-1">
+                        WhatsApp ou E-mail (Opcional para acompanhamento)
                       </label>
                       <input
                         type="text"
                         value={contato}
                         onChange={(e) => setContato(e.target.value)}
-                        placeholder="Caso deseje receber a devolutiva da pesquisa ou novidades pedagógicas do projeto"
+                        placeholder="Ex: (67) 99999-9999 ou email@exemplo.com"
                         className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-pink-500 focus:outline-none transition-colors"
                       />
                     </div>
                   </div>
                 </div>
-              ) : isManagement ? (
-                /* === PERFIL GESTÃO / SECRETARIA (ROTEIRO B) === */
-                <div className="rounded-2xl border border-amber-500/30 bg-slate-900/90 p-6 shadow-xl space-y-4">
-                  <div className="border-b border-slate-800 pb-2">
-                    <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                      <Landmark className="h-4 w-4 text-amber-400" />
-                      1. Identificação Institucional & Órgão Gestor
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      Informações da secretaria de educação e do cargo institucional para mapeamento de rede.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Seu Nome ou Cargo (ou Pseudônimo)
-                      </label>
-                      <input
-                        type="text"
-                        value={nome}
-                        onChange={(e) => setNome(e.target.value)}
-                        placeholder="Ex: Profa. Patrícia - Coordenação"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Município e Estado (UF) *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={municipio}
-                        onChange={(e) => setMunicipio(e.target.value)}
-                        placeholder="Ex: Dourados - MS"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Secretaria de Educação ou Diretoria / Órgão Público *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={escolaOrOrgao}
-                        onChange={(e) => setEscolaOrOrgao(e.target.value)}
-                        placeholder="Ex: SEMED Campo Grande - Coordenadoria de Educação Inclusiva"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Cargo / Função Institucional & Tempo na Rede
-                      </label>
-                      <input
-                        type="text"
-                        value={perfil}
-                        onChange={(e) => setPerfil(e.target.value)}
-                        placeholder="Ex: Coordenadora de AEE há 4 anos"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-2">
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        WhatsApp ou E-mail institucional (Opcional)
-                      </label>
-                      <input
-                        type="text"
-                        value={contato}
-                        onChange={(e) => setContato(e.target.value)}
-                        placeholder="Para envio do relatório técnico executivo da pesquisa"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : isClinic ? (
-                /* === PERFIL SAÚDE & CLÍNICA (ROTEIRO G) === */
-                <div className="rounded-2xl border border-teal-500/30 bg-slate-900/90 p-6 shadow-xl space-y-4">
-                  <div className="border-b border-slate-800 pb-2">
-                    <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                      <Stethoscope className="h-4 w-4 text-teal-400" />
-                      1. Identificação Clínica & Espaço Terapêutico
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      Contexto de atendimento clínico infantil em consultório ou clínica multidisciplinar.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Seu Nome ou Pseudônimo
-                      </label>
-                      <input
-                        type="text"
-                        value={nome}
-                        onChange={(e) => setNome(e.target.value)}
-                        placeholder="Ex: Dra. Camila Sampaio"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Município e Estado (UF) *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={municipio}
-                        onChange={(e) => setMunicipio(e.target.value)}
-                        placeholder="Ex: Campo Grande - MS"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Clínica, Consultório ou Espaço Terapêutico *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={escolaOrOrgao}
-                        onChange={(e) => setEscolaOrOrgao(e.target.value)}
-                        placeholder="Ex: Clínica Desenvolvimento Infantil / Consultório Próprio"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Especialidade Clínica & Tempo de Atendimento
-                      </label>
-                      <input
-                        type="text"
-                        value={perfil}
-                        onChange={(e) => setPerfil(e.target.value)}
-                        placeholder="Ex: Terapeuta Ocupacional / Psicóloga Infantil há 8 anos"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-2">
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        WhatsApp ou E-mail profissional (Opcional)
-                      </label>
-                      <input
-                        type="text"
-                        value={contato}
-                        onChange={(e) => setContato(e.target.value)}
-                        placeholder="Para envio do resumo da pesquisa clínica ou contato de follow-up"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-                  </div>
-                </div>
               ) : (
-                /* === PERFIL DOCENTE / SALA DE RECURSOS (ROTEIROS A E C) === */
-                <div className="rounded-2xl border border-indigo-500/30 bg-slate-900/90 p-6 shadow-xl space-y-4">
+                /* === PERFIL PROFISSIONAL / GESTÃO / CLÍNICA === */
+                <div className={`rounded-2xl border border-slate-800 bg-slate-900/90 p-6 shadow-xl space-y-4 transition-opacity ${!consentAccepted ? 'opacity-50 pointer-events-none' : ''}`}>
                   <div className="border-b border-slate-800 pb-2">
                     <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                      <GraduationCap className="h-4 w-4 text-indigo-400" />
-                      1. Identificação Docente & Sala de Recursos
+                      <Briefcase className="h-4 w-4 text-indigo-400" />
+                      1. Identificação Profissional & Atuação
                     </h2>
                     <p className="text-xs text-slate-400">
-                      Contexto da sua atuação pedagógica na sala de recursos multifuncional ou sala regular.
+                      Informações sobre sua prática profissional e contexto de atuação.
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Seu Nome (ou Pseudônimo se preferir)
+                        Instituição, Clínica ou Escola
                       </label>
                       <input
                         type="text"
-                        value={nome}
-                        onChange={(e) => setNome(e.target.value)}
-                        placeholder="Ex: Profa. Ana Maria"
+                        value={escolaOrOrgao}
+                        onChange={(e) => setEscolaOrOrgao(e.target.value)}
+                        placeholder={isClinic ? 'Ex: Clínica de Desenvolvimento Infantil' : 'Ex: Escola Municipal ou Secretaria'}
                         className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
                       />
                     </div>
@@ -698,40 +531,52 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
 
                     <div>
                       <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Escola(s) e/ou Sala de Recursos Multifuncional *
+                        Sua Função / Especialidade
                       </label>
                       <input
                         type="text"
-                        required
-                        value={escolaOrOrgao}
-                        onChange={(e) => setEscolaOrOrgao(e.target.value)}
-                        placeholder="Ex: E.M. Darcy Ribeiro ou Sala de Recursos AEE"
+                        value={perfil}
+                        onChange={(e) => setPerfil(e.target.value)}
+                        placeholder={isClinic ? 'Ex: Psicóloga Infantil / Neuropsicopedagoga' : 'Ex: Professor(a) de AEE'}
                         className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
                       />
                     </div>
 
                     <div>
                       <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        Função Docente & Tempo em Educação Especial
+                        Tempo de Atuação na Função
                       </label>
                       <input
                         type="text"
-                        value={perfil}
-                        onChange={(e) => setPerfil(e.target.value)}
-                        placeholder="Ex: Professora de AEE há 6 anos"
+                        value={tempoDeCasa}
+                        onChange={(e) => setTempoDeCasa(e.target.value)}
+                        placeholder="Ex: 5 anos de atendimento"
                         className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
+                    <div>
                       <label className="text-xs font-semibold text-slate-300 block mb-1">
-                        WhatsApp ou E-mail para contato (Opcional)
+                        Seu Nome (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={nome}
+                        onChange={(e) => setNome(e.target.value)}
+                        placeholder="Nome profissional ou como prefere ser chamado(a)"
+                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-slate-300 block mb-1">
+                        Contato / E-mail ou WhatsApp (Opcional)
                       </label>
                       <input
                         type="text"
                         value={contato}
                         onChange={(e) => setContato(e.target.value)}
-                        placeholder="Para envio do resumo da pesquisa pedagógica ou contato de follow-up"
+                        placeholder="Para caso queira receber os resultados da pesquisa"
                         className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
                       />
                     </div>
@@ -740,48 +585,42 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
               )}
 
               {/* =======================================================
-                  BLOCO 2: PERGUNTAS ESPECÍFICAS DO ROTEIRO
+                  BLOCO 2: PERGUNTAS DO ROTEIRO COM AVISO DE TEXTO LIVRE
                  ======================================================= */}
-              <div className="space-y-6">
+              <div className={`space-y-6 transition-opacity ${!consentAccepted ? 'opacity-50 pointer-events-none' : ''}`}>
                 {roteiroConfig.blocks.map((block, bIdx) => (
                   <div
                     key={block.blockId}
                     className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6 shadow-xl space-y-5"
                   >
-                    <div className="border-b border-slate-800 pb-2.5">
-                      <span className={`text-[10px] font-mono uppercase font-bold ${
-                        isFamily ? 'text-pink-400' : isClinic ? 'text-teal-400' : 'text-indigo-400'
-                      }`}>
-                        {isFamily ? 'Tópico' : 'Bloco'} {bIdx + 1} de {roteiroConfig.blocks.length}
-                      </span>
-                      <h3 className="text-sm font-bold text-white">
+                    <div className="border-b border-slate-800 pb-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-mono font-bold text-indigo-400 uppercase">
+                          Bloco {bIdx + 1}
+                        </span>
+                        {block.estimatedTime && (
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {block.estimatedTime}
+                          </span>
+                        )}
+                      </div>
+                      <h2 className="text-sm font-bold text-white mt-1">
                         {block.title}
-                      </h3>
-                      {block.notes && (
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          {block.notes}
-                        </p>
-                      )}
+                      </h2>
                     </div>
 
-                    <div className="space-y-5">
+                    <div className="space-y-4">
                       {block.questions.map((q) => (
                         <div key={q.id} className="space-y-1.5">
-                          <label className="text-xs font-semibold text-slate-200 block leading-relaxed">
-                            <span className={`inline-block rounded border px-1.5 py-0.2 text-[10px] font-mono mr-2 ${
-                              isFamily
-                                ? 'bg-pink-950 border-pink-800 text-pink-300'
-                                : isClinic
-                                ? 'bg-teal-950 border-teal-800 text-teal-300'
-                                : 'bg-indigo-950 border-indigo-800 text-indigo-300'
-                            }`}>
-                              #{q.order}
+                          <label className="text-xs font-medium text-slate-200 block leading-snug">
+                            <span className="font-bold text-indigo-300 mr-1.5">
+                              {q.id}.
                             </span>
                             {q.text}
                           </label>
 
                           {q.tip && (
-                            <p className="text-[11px] text-slate-400 italic pl-1">
+                            <p className="text-[11px] text-slate-400 italic">
                               💡 {q.tip}
                             </p>
                           )}
@@ -790,15 +629,15 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
                             rows={3}
                             value={answers[q.id] || ''}
                             onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                            placeholder={
-                              isFamily
-                                ? 'Conte com suas próprias palavras como isso acontece na rotina do seu filho(a)...'
-                                : 'Descreva como isso acontece ou aconteceu na sua rotina real...'
-                            }
-                            className={`w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none transition-colors ${
-                              isFamily ? 'focus:border-pink-500' : isClinic ? 'focus:border-teal-500' : 'focus:border-indigo-500'
-                            }`}
+                            placeholder="Descreva fatos, rotinas e situações reais que você vivencia..."
+                            className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors resize-y"
                           />
+
+                          {/* 2.6: Aviso obrigatório em todos os campos de texto livre */}
+                          <div className="flex items-center gap-1.5 text-[11px] text-amber-400/90 font-medium pt-0.5">
+                            <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                            <span>Não escreva o nome da criança.</span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -806,105 +645,100 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
                 ))}
               </div>
 
-              {/* Bloco 3: Pergunta Comportamental sobre Gastos */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6 shadow-xl space-y-4">
+              {/* =======================================================
+                  BLOCO 3: GASTOS E RECURSOS PRÓPRIOS
+                 ======================================================= */}
+              <div className={`rounded-2xl border border-slate-800 bg-slate-900/90 p-6 shadow-xl space-y-4 transition-opacity ${!consentAccepted ? 'opacity-50 pointer-events-none' : ''}`}>
                 <div className="border-b border-slate-800 pb-2">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Heart className="h-4 w-4 text-emerald-400" />
-                    {isFamily
-                      ? 'Investimento Pessoal com Recursos ou Terapias'
-                      : 'Comportamento Real de Investimento Próprio'}
-                  </h3>
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Heart className="h-4 w-4 text-rose-400" />
+                    Gastos e Aquisições com Recursos Próprios
+                  </h2>
                   <p className="text-xs text-slate-400">
-                    {isFamily
-                      ? 'Ajuda a mapear os custos que as famílias assumem diretamente para apoiar os estudos ou desenvolvimento.'
-                      : 'Mapeamento de dor aguda comprovada por desembolso próprio (não hipotético).'}
+                    Investimentos do próprio bolso em materiais ou apoios adicionais.
                   </p>
                 </div>
 
                 <div className="space-y-3">
-                  <label className="flex items-start gap-3 cursor-pointer group">
+                  <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950/60 hover:bg-slate-950 cursor-pointer transition-colors">
                     <input
                       type="checkbox"
                       checked={pagouBolso}
                       onChange={(e) => setPagouBolso(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-0 cursor-pointer"
+                      className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500"
                     />
                     <div className="text-xs">
-                      <span className="font-semibold text-slate-200 group-hover:text-white transition-colors">
+                      <span className="font-semibold text-white block">
                         {isFamily
-                          ? 'Já paguei do meu próprio bolso por reforço, materiais adaptados, cursos ou terapias nos últimos 12 meses'
-                          : 'Já paguei do meu próprio bolso por materiais, plataformas, cursos ou ferramentas para uso com alunos/pacientes'}
+                          ? 'Já paguei do meu próprio bolso por reforços, materiais ou terapias particulares.'
+                          : 'Já paguei do meu próprio bolso por materiais, impressões, jogos ou cursos para atender estudantes.'}
                       </span>
-                      <p className="text-slate-400 text-[11px] mt-0.5">
-                        Indica que a necessidade já exigiu investimento financeiro direto por iniciativa própria.
-                      </p>
+                      <span className="text-slate-400 text-[11px]">
+                        Assinale se você já utilizou recursos próprios para viabilizar apoios.
+                      </span>
                     </div>
                   </label>
 
                   {pagouBolso && (
-                    <div className="pl-7 pt-1 animate-fade-in">
-                      <label className="text-xs font-medium text-slate-300 block mb-1">
-                        Quanto você estima ter investido? (Valor aproximado em R$)
+                    <div className="space-y-1.5 pt-2">
+                      <label className="text-xs font-semibold text-slate-300 block">
+                        Aproximadamente quanto você já gastou ou costuma gastar, e com quais itens?
                       </label>
                       <input
                         type="text"
                         value={valorBolso}
                         onChange={(e) => setValorBolso(e.target.value)}
-                        placeholder="Ex: R$ 350,00 ou R$ 120,00/mês"
-                        className="w-full sm:w-64 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                        placeholder="Ex: R$ 350 por mês com impressões e jogos pedagógicos"
+                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
                       />
+                      <div className="flex items-center gap-1.5 text-[11px] text-amber-400/90 font-medium">
+                        <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                        <span>Não escreva o nome da criança.</span>
+                      </div>
                     </div>
                   )}
                 </div>
               </div>
 
+              {/* Alerta de Erro no Envio */}
+              {submitError && (
+                <div className="rounded-xl border border-rose-500/50 bg-rose-950/70 p-4 text-xs text-rose-200 flex items-start gap-3 shadow-lg">
+                  <AlertTriangle className="h-5 w-5 shrink-0 text-rose-400 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-white">Não foi possível enviar suas respostas</p>
+                    <p>{submitError}</p>
+                  </div>
+                </div>
+              )}
+
               {/* Botão de Envio */}
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className={`w-full py-4 px-6 rounded-2xl font-black text-sm flex items-center justify-center gap-2 text-white shadow-xl transition-all ${
-                    isSubmitting
-                      ? 'bg-slate-700 cursor-not-allowed text-slate-400'
-                      : isFamily
-                      ? 'bg-gradient-to-r from-pink-600 via-rose-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 shadow-pink-600/30'
-                      : isClinic
-                      ? 'bg-gradient-to-r from-teal-600 via-emerald-600 to-cyan-700 hover:from-teal-500 hover:to-cyan-600 shadow-teal-600/30'
-                      : isManagement
-                      ? 'bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 shadow-amber-600/30'
-                      : 'bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-indigo-600/30'
+                  disabled={isSubmitting || !consentAccepted}
+                  className={`w-full py-4 px-6 rounded-2xl font-black text-sm flex items-center justify-center gap-2.5 shadow-xl transition-all ${
+                    isSubmitting || !consentAccepted
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                      : 'bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 hover:from-indigo-600 hover:to-indigo-800 text-white shadow-indigo-600/30 hover:shadow-indigo-600/50 active:scale-[0.99]'
                   }`}
                 >
                   {isSubmitting ? (
                     <>
-                      <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>Gravando respostas com segurança...</span>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      <span>Gravando respostas...</span>
                     </>
                   ) : (
                     <>
                       <Send className="h-4 w-4" />
-                      <span>{isFamily ? 'Enviar Respostas da Família' : 'Enviar Respostas da Pesquisa'}</span>
+                      <span>Enviar Minhas Respostas</span>
                     </>
                   )}
                 </button>
-
-                <p className="text-[11px] text-center text-slate-400 mt-3">
-                  🔒 Suas respostas são armazenadas com integridade metodológica e confidencialidade.
-                </p>
               </div>
             </form>
           </div>
         )}
       </main>
-
-      {/* Rodapé Limpo */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-6 mt-12 text-center text-xs text-slate-400">
-        <p>Projeto HiperReforço · Pesquisa Empírica e Validação de Hipóteses</p>
-        <p className="text-[11px] text-slate-500 mt-1">
-          Inovação no acolhimento de hiperfocos e apoio à neurodiversidade no Brasil.
-        </p>
-      </footer>
     </div>
   );
 };

@@ -1,0 +1,146 @@
+{
+  "entities": {
+    "AllowlistEntry": {
+      "title": "AllowlistEntry",
+      "description": "Controle de acesso autorizado ao CRM do HiperReforço",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "E-mail Google autorizado para acessar o CRM"
+        },
+        "ativo": {
+          "type": "boolean",
+          "description": "Indica se o acesso está ativo ou revogado"
+        },
+        "adicionadoEm": {
+          "type": "string",
+          "description": "Data ISO de inclusão na allowlist"
+        },
+        "role": {
+          "type": "string",
+          "description": "Papel do pesquisador (ex: pesquisador, admin)"
+        }
+      },
+      "required": ["email", "ativo"]
+    },
+    "ValidacaoEntrevista": {
+      "title": "ValidacaoEntrevista",
+      "description": "Registro completo de entrevista do Caderno de Validação do HiperReforço",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificador único do registro"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp ISO de criação"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp ISO da última atualização"
+        },
+        "date": {
+          "type": "string",
+          "description": "Data no formato YYYY-MM-DD"
+        },
+        "municipio": {
+          "type": "string",
+          "description": "Município e UF da entrevista"
+        },
+        "escolaOrOrgao": {
+          "type": "string",
+          "description": "Escola, clínica ou órgão participante"
+        },
+        "entrevistadoPerfil": {
+          "type": "string",
+          "description": "Perfil do entrevistado"
+        },
+        "roteiro": {
+          "type": "string",
+          "description": "Roteiro metodológico aplicado (A, B, C, D, E, G)"
+        },
+        "status": {
+          "type": "string",
+          "description": "Estágio no pipeline Kanban do CRM"
+        }
+      },
+      "required": ["id", "roteiro", "status", "municipio"]
+    },
+    "ValidacaoResposta": {
+      "title": "ValidacaoResposta",
+      "description": "Submissão recebida através de formulário público tokenizado",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificador da submissão"
+        },
+        "token": {
+          "type": "string",
+          "description": "Token de uso único utilizado"
+        },
+        "roteiro": {
+          "type": "string",
+          "description": "Roteiro respondido"
+        },
+        "termoConsentimento": {
+          "type": "object",
+          "description": "Registro de consentimento informado e aceite"
+        }
+      },
+      "required": ["id", "token", "roteiro", "termoConsentimento"]
+    },
+    "ValidacaoToken": {
+      "title": "ValidacaoToken",
+      "description": "Token aleatório de uso único para envio de formulário público",
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "Token criptográfico único"
+        },
+        "roteiro": {
+          "type": "string",
+          "description": "Roteiro atribuído ao token"
+        },
+        "status": {
+          "type": "string",
+          "description": "Estado do token: pendente ou consumido"
+        },
+        "usado": {
+          "type": "boolean",
+          "description": "Flag de consumo do token"
+        },
+        "criadoEm": {
+          "type": "string",
+          "description": "Data de emissão do convite"
+        },
+        "criadoPor": {
+          "type": "string",
+          "description": "E-mail do pesquisador que gerou o token"
+        }
+      },
+      "required": ["token", "roteiro", "usado", "status"]
+    }
+  },
+  "firestore": {
+    "/allowlist/{email}": {
+      "schema": { "$ref": "#/entities/AllowlistEntry" },
+      "description": "Controle de e-mails autorizados para acesso ao CRM"
+    },
+    "/validacao_entrevistas/{interviewId}": {
+      "schema": { "$ref": "#/entities/ValidacaoEntrevista" },
+      "description": "Registros de campo e entrevistas do CRM"
+    },
+    "/validacao_respostas/{respostaId}": {
+      "schema": { "$ref": "#/entities/ValidacaoResposta" },
+      "description": "Submissões externas de formulários com token"
+    },
+    "/validacao_tokens/{token}": {
+      "schema": { "$ref": "#/entities/ValidacaoToken" },
+      "description": "Tokens de uso único para formulários externos"
+    }
+  }
+}
