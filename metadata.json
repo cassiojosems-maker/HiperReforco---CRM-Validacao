@@ -1,0 +1,8 @@
+{
+  "name": "HiperReforço — CRM & Caderno de Validação",
+  "description": "Sistema de validação de hipóteses, checklist de entrevistas Needs-First e formulários de pesquisa para a startup HiperReforço (EdTech / AEE).",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
