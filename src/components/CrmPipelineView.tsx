@@ -78,7 +78,7 @@ export const CrmPipelineView: React.FC<CrmPipelineViewProps> = ({
       (item.entrevistadoNome && item.entrevistadoNome.toLowerCase().includes(query)) ||
       (item.frasesTextuais && item.frasesTextuais.some((f) => f.toLowerCase().includes(query)));
 
-    const itemCanal = item.canal || (item.roteiro === 'G' ? 'saude' : 'educacao');
+    const itemCanal = item.canal || (item.roteiro === 'F' ? 'saude' : 'educacao');
     const matchesCanal = selectedCanal === 'all' || itemCanal === selectedCanal;
     const matchesRoteiro = selectedRoteiro === 'all' || item.roteiro === selectedRoteiro;
     const matchesVeredito = selectedVeredito === 'all' || item.vereditoGeral === selectedVeredito;
@@ -124,7 +124,7 @@ export const CrmPipelineView: React.FC<CrmPipelineViewProps> = ({
       C: 'bg-emerald-950 border-emerald-700 text-emerald-300',
       D: 'bg-sky-950 border-sky-700 text-sky-300',
       E: 'bg-purple-950 border-purple-700 text-purple-300',
-      G: 'bg-teal-950 border-teal-600 text-teal-300',
+      F: 'bg-teal-950 border-teal-600 text-teal-300',
     };
     const label =
       config.type === 'A'
@@ -135,7 +135,7 @@ export const CrmPipelineView: React.FC<CrmPipelineViewProps> = ({
         ? 'Piloto'
         : config.type === 'D'
         ? 'Família B2C'
-        : config.type === 'G'
+        : config.type === 'F'
         ? 'Clínica / Saúde'
         : 'Típico';
 
@@ -361,7 +361,7 @@ export const CrmPipelineView: React.FC<CrmPipelineViewProps> = ({
                           <div>
                             {(() => {
                               const isFamily = item.roteiro === 'D' || item.roteiro === 'E' || item.tipoPerfilIdentificacao === 'familia';
-                              const isClinic = item.roteiro === 'G' || item.tipoPerfilIdentificacao === 'clinica';
+                              const isClinic = item.roteiro === 'F' || item.tipoPerfilIdentificacao === 'clinica';
                               const isManagement = item.roteiro === 'B' || item.tipoPerfilIdentificacao === 'gestao';
 
                               return (

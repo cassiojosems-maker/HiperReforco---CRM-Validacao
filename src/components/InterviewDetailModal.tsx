@@ -39,7 +39,7 @@ export const InterviewDetailModal: React.FC<InterviewDetailModalProps> = ({
   const roteiroConfig = ROTEIROS_CONFIG[interview.roteiro];
 
   const isFamily = interview.roteiro === 'D' || interview.roteiro === 'E' || interview.tipoPerfilIdentificacao === 'familia';
-  const isClinic = interview.roteiro === 'G' || interview.tipoPerfilIdentificacao === 'clinica';
+  const isClinic = interview.roteiro === 'F' || interview.tipoPerfilIdentificacao === 'clinica';
   const isManagement = interview.roteiro === 'B' || interview.tipoPerfilIdentificacao === 'gestao';
 
   return (

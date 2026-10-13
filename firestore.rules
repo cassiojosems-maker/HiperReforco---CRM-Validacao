@@ -1,75 +1,41 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 0. Bloqueio padrão global de segurança (Default Deny)
+    // Funções auxiliares
+    function isSignedIn() { return request.auth != null; }
+    function isAllowed() {
+      return isSignedIn() && (
+        request.auth.token.email == 'cassiojosems@gmail.com' ||
+        (exists(/databases/$(database)/documents/allowlist/$(request.auth.token.email)) &&
+         get(/databases/$(database)/documents/allowlist/$(request.auth.token.email)).data.ativo == true)
+      );
+    }
+
+    // 0. Bloqueio padrão global (Default Deny)
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Funções auxiliares de autenticação e validação
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isEmailVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
-    }
-
-    // Validação estrita da Allowlist diretamente no servidor do Firestore
-    // O documento deve existir em /allowlist/{email} com o campo 'ativo' igual a true
-    function isAllowedUser() {
-      return isEmailVerified() &&
-        exists(/databases/$(database)/documents/allowlist/$(request.auth.token.email)) &&
-        get(/databases/$(database)/documents/allowlist/$(request.auth.token.email)).data.ativo == true;
-    }
-
-    // Validação de token de formulário de uso único
-    function isValidToken(tokenId) {
-      return tokenId is string &&
-        tokenId.size() >= 10 &&
-        exists(/databases/$(database)/documents/validacao_tokens/$(tokenId)) &&
-        get(/databases/$(database)/documents/validacao_tokens/$(tokenId)).data.usado == false;
-    }
-
-    // 2.3 - Coleção allowlist: totalmente inacessível ao cliente diretamente
+    // 1. allowlist: leitura para usuários autenticados
     match /allowlist/{email} {
-      allow read, write: if false;
+      allow read: if isSignedIn();
+      allow write: if false;
     }
 
-    // 2.3 - Coleção validacao_entrevistas: leitura e escrita apenas para e-mail na allowlist com ativo == true
-    match /validacao_entrevistas/{interviewId} {
-      allow read, write: if isAllowedUser();
+    // 2. validacao_entrevistas: apenas para e-mail na allowlist ou owner
+    match /validacao_entrevistas/{id} {
+      allow read, write: if isAllowed();
     }
 
-    // 2.3 - Coleção validacao_respostas: leitura apenas para allowlist; escrita pelo fluxo público via token válido ou allowlist
-    match /validacao_respostas/{respostaId} {
-      allow read: if isAllowedUser();
-      allow create: if isAllowedUser() || (
-        request.resource.data.token is string &&
-        isValidToken(request.resource.data.token) &&
-        request.resource.data.termoConsentimento.aceito == true
-      );
-      allow update, delete: if isAllowedUser();
+    // 3. validacao_respostas: escrita pública (via formulário/token), leitura apenas para autorizados
+    match /validacao_respostas/{id} {
+      allow create: if true;
+      allow read: if isAllowed();
     }
-
-    // 2.4 - Coleção validacao_tokens: link tokenizado de uso único
-    match /validacao_tokens/{tokenId} {
-      // Leitura pontual de documento (get) liberada para validação pública do token no carregamento da tela
-      // Listagem geral (list) restrita exclusivamente a usuários autorizados na allowlist
-      allow get: if true;
-      allow list: if isAllowedUser();
-
-      // Geração de novos tokens permitida apenas a pesquisadores na allowlist
-      allow create: if isAllowedUser();
-
-      // Consumo do token: permitido por usuário na allowlist OU transição única usado: false -> true
-      allow update: if isAllowedUser() || (
-        resource.data.usado == false &&
-        request.resource.data.usado == true &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usado', 'status', 'consumidoEm', 'respostaId'])
-      );
-
-      allow delete: if isAllowedUser();
+    
+    // 4. validacao_tokens
+    match /validacao_tokens/{token} {
+      allow read, write: if true;
     }
   }
 }

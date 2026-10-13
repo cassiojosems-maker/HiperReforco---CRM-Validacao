@@ -13,7 +13,6 @@ import { AuthGate } from './components/AuthGate';
 import { InterviewRecord, StatusCRM, RoteiroType } from './types/validation';
 import {
   getStoredInterviews,
-  saveStoredInterviews,
   saveInterviewToFirestore,
   deleteInterviewFromFirestore,
   subscribeToCrmInterviews,
@@ -26,71 +25,14 @@ import {
 import { Check, Info, Lock, ShieldAlert, KeyRound, AlertTriangle } from 'lucide-react';
 
 // 2.7 - Controle de ativação do formulário público externo reaberto após 2.4, 2.5 e 2.6
-const FORMULARIO_PUBLICO_ATIVO = false;
+const FORMULARIO_PUBLICO_ATIVO = true;
 
-export default function App() {
-  const [interviews, setInterviews] = useState<InterviewRecord[]>([]);
-  const [currentTab, setCurrentTab] = useState<'crm' | 'live' | 'form' | 'matriz' | 'relatorio'>('crm');
-  const [activeRecord, setActiveRecord] = useState<InterviewRecord | null>(null);
-  const [detailModalRecord, setDetailModalRecord] = useState<InterviewRecord | null>(null);
-  const [isMeetModalOpen, setIsMeetModalOpen] = useState<boolean>(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Modo isolado de entrevistado (quando o link ?mode=form é acessado)
-  const [isRespondentMode, setIsRespondentMode] = useState<boolean>(false);
-  const [respondentRoteiro, setRespondentRoteiro] = useState<RoteiroType>('A');
-  const [respondentToken, setRespondentToken] = useState<string | null>(null);
-  const [tokenStatus, setTokenStatus] = useState<{
-    loading: boolean;
-    valid: boolean;
-    used: boolean;
-    error?: string;
-  }>({ loading: true, valid: false, used: false });
-
-  // Inicializa dados do localStorage ou seeds e sincroniza com o Firestore
+const CrmSubscriptionHandler: React.FC<{
+  setInterviews: React.Dispatch<React.SetStateAction<InterviewRecord[]>>;
+  showToast: (msg: string) => void;
+}> = ({ setInterviews, showToast }) => {
   useEffect(() => {
-    // 1. Carrega do cache offline imediatamente
-    const loaded = getStoredInterviews();
-    setInterviews(loaded);
-
-    // 2. Checa se é modo respondente (?mode=form)
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('mode') === 'form') {
-      setIsRespondentMode(true);
-      const rot = (params.get('roteiro') || 'A').toUpperCase() as RoteiroType;
-      const validRoteiro = (['A', 'B', 'C', 'D', 'E', 'G'].includes(rot) ? rot : 'A') as RoteiroType;
-      setRespondentRoteiro(validRoteiro);
-
-      // 2.4: Validação obrigatória de token único
-      const token = params.get('t');
-      setRespondentToken(token);
-
-      if (!token) {
-        setTokenStatus({
-          loading: false,
-          valid: false,
-          used: false,
-          error: 'Link sem token de convite. O acesso ao formulário requer um token individual exclusivo.',
-        });
-        return;
-      }
-
-      // Verifica token no Firestore
-      verifyValidationToken(token).then((res) => {
-        setTokenStatus({
-          loading: false,
-          valid: res.valid,
-          used: res.used,
-          error: res.error,
-        });
-        if (res.roteiro) {
-          setRespondentRoteiro(res.roteiro);
-        }
-      });
-      return;
-    }
-
-    // 3. Se for modo interno CRM: Conecta subscrição em tempo real com o Firestore (2.1)
+    // 3. Conecta subscrição em tempo real com o Firestore (2.1)
     const unsubscribeCrm = subscribeToCrmInterviews(
       (firestoreRecords) => {
         if (firestoreRecords.length > 0) {
@@ -131,7 +73,76 @@ export default function App() {
       unsubscribeCrm();
       unsubscribePublic();
     };
+  }, [setInterviews, showToast]);
+
+  return null;
+};
+
+export default function App() {
+  const [interviews, setInterviews] = useState<InterviewRecord[]>([]);
+  const [currentTab, setCurrentTab] = useState<'crm' | 'live' | 'form' | 'matriz' | 'relatorio'>('crm');
+  const [activeRecord, setActiveRecord] = useState<InterviewRecord | null>(null);
+  const [detailModalRecord, setDetailModalRecord] = useState<InterviewRecord | null>(null);
+  const [isMeetModalOpen, setIsMeetModalOpen] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Modo isolado de entrevistado (quando o link ?mode=form é acessado)
+  const [isRespondentMode, setIsRespondentMode] = useState<boolean>(false);
+  const [respondentRoteiro, setRespondentRoteiro] = useState<RoteiroType>('A');
+  const [respondentToken, setRespondentToken] = useState<string | null>(null);
+  const [tokenStatus, setTokenStatus] = useState<{
+    loading: boolean;
+    valid: boolean;
+    used: boolean;
+    error?: string;
+  }>({ loading: true, valid: false, used: false });
+
+  // Inicializa dados do localStorage ou seeds e sincroniza com o Firestore
+  useEffect(() => {
+    // 1. Carrega do cache offline imediatamente
+    const loaded = getStoredInterviews();
+    setInterviews(loaded);
+
+    // 2. Checa se é modo respondente (?mode=form)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('mode') === 'form') {
+      setIsRespondentMode(true);
+      const rot = (params.get('roteiro') || 'A').toUpperCase() as RoteiroType;
+      const validRoteiro = (['A', 'B', 'C', 'D', 'E', 'F'].includes(rot) ? rot : 'A') as RoteiroType;
+      setRespondentRoteiro(validRoteiro);
+
+      // 2.4: Validação obrigatória de token único
+      const token = params.get('t');
+      setRespondentToken(token);
+
+      if (!token) {
+        setTokenStatus({
+          loading: false,
+          valid: false,
+          used: false,
+          error: 'Link sem token de convite. O acesso ao formulário requer um token individual exclusivo.',
+        });
+        return;
+      }
+
+      // Verifica token no Firestore
+      verifyValidationToken(token).then((res) => {
+        setTokenStatus({
+          loading: false,
+          valid: res.valid,
+          used: res.used,
+          error: res.error,
+        });
+        if (res.roteiro) {
+          setRespondentRoteiro(res.roteiro);
+        }
+      });
+      return;
+    }
   }, []);
+
+
+
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -369,7 +380,9 @@ export default function App() {
   return (
     <AuthGate>
       {({ currentUser, onLogout }) => (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
+        <>
+          <CrmSubscriptionHandler setInterviews={setInterviews} showToast={showToast} />
+          <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
           {/* Toast de Notificação */}
           {toastMessage && (
             <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-950/90 px-4 py-3 text-xs font-bold text-emerald-200 shadow-2xl backdrop-blur-md animate-slide-up">
@@ -518,6 +531,7 @@ export default function App() {
             </div>
           )}
         </div>
+        </>
       )}
     </AuthGate>
   );

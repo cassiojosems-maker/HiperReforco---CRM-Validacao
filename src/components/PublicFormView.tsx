@@ -34,7 +34,7 @@ export const PublicFormView: React.FC<PublicFormViewProps> = ({
   onViewRecord,
   recentExternalSubmissions = [],
 }) => {
-  const [selectedRoteiro, setSelectedRoteiro] = useState<RoteiroType>('G');
+  const [selectedRoteiro, setSelectedRoteiro] = useState<RoteiroType>('F');
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [tokenList, setTokenList] = useState<ValidationTokenData[]>([]);
@@ -80,7 +80,7 @@ export const PublicFormView: React.FC<PublicFormViewProps> = ({
   // Texto de convite empático e transparente, sem tom de venda
   const getInviteText = (r: RoteiroType, url: string) => {
     const link = url || '[Gere o link tokenizado acima]';
-    if (r === 'G') {
+    if (r === 'F') {
       return `Olá! Estamos realizando uma pesquisa independente de campo para entender a rotina prática de terapeutas infantis, neuropsicopedagogos e fonoaudiólogos no atendimento de crianças neurodivergentes e o intervalo entre as sessões. Não estamos vendendo nenhum produto ou software. Se puder responder a estas breves perguntas sobre sua rotina real pelo link de convite único: ${link}`;
     }
     if (r === 'B') {
@@ -152,10 +152,10 @@ export const PublicFormView: React.FC<PublicFormViewProps> = ({
             Selecione o Roteiro para o Convite:
           </label>
           <div className="flex flex-wrap gap-1.5">
-            {(['A', 'B', 'C', 'D', 'E', 'G'] as RoteiroType[]).map((r) => {
+            {(['A', 'B', 'C', 'D', 'E', 'F'] as RoteiroType[]).map((r) => {
               const isSelected = selectedRoteiro === r;
               const isFam = r === 'D' || r === 'E';
-              const isClin = r === 'G';
+              const isClin = r === 'F';
               const isGest = r === 'B';
 
               return (

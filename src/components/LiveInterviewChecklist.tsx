@@ -66,7 +66,7 @@ export const LiveInterviewChecklist: React.FC<LiveInterviewChecklistProps> = ({
 
   // Identificação estruturada por perfil
   const isFamily = roteiro === 'D' || roteiro === 'E';
-  const isClinic = roteiro === 'G';
+  const isClinic = roteiro === 'F';
   const isManagement = roteiro === 'B';
 
   const [parentesco, setParentesco] = useState(currentRecord?.parentesco || 'Mãe');
@@ -91,7 +91,7 @@ export const LiveInterviewChecklist: React.FC<LiveInterviewChecklistProps> = ({
         ? ['H3', 'H4']
         : roteiro === 'E'
         ? ['H6']
-        : roteiro === 'G'
+        : roteiro === 'F'
         ? ['HS1', 'HS2', 'HS3', 'HS4', 'HS5']
         : ['H1', 'H5'])
   );
@@ -271,7 +271,7 @@ export const LiveInterviewChecklist: React.FC<LiveInterviewChecklistProps> = ({
                 Roteiro de Campo:
               </span>
               <div className="flex flex-wrap gap-1.5">
-                {(['A', 'B', 'C', 'D', 'E', 'G'] as RoteiroType[]).map((r) => (
+                {(['A', 'B', 'C', 'D', 'E', 'F'] as RoteiroType[]).map((r) => (
                   <button
                     key={r}
                     onClick={() => {
@@ -281,17 +281,17 @@ export const LiveInterviewChecklist: React.FC<LiveInterviewChecklistProps> = ({
                       if (r === 'C') setHipotesesTestadas(['H1', 'H5']);
                       if (r === 'D') setHipotesesTestadas(['H1', 'H5']);
                       if (r === 'E') setHipotesesTestadas(['H6']);
-                      if (r === 'G') setHipotesesTestadas(['HS1', 'HS2', 'HS3', 'HS4', 'HS5']);
+                      if (r === 'F') setHipotesesTestadas(['HS1', 'HS2', 'HS3', 'HS4', 'HS5']);
                     }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       roteiro === r
-                        ? r === 'G'
+                        ? r === 'F'
                           ? 'bg-teal-600 text-white shadow-md shadow-teal-600/30'
                           : 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                         : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                     }`}
                   >
-                    Roteiro {r} {r === 'G' && '· Clínica'}
+                    Roteiro {r} {r === 'F' && '· Clínica'}
                   </button>
                 ))}
               </div>

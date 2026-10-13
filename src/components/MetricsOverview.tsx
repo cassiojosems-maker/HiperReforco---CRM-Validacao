@@ -23,7 +23,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({ interviews }) 
   const countB2G = interviews.filter((i) => i.roteiro === 'B').length;
   const countPiloto = interviews.filter((i) => i.roteiro === 'C').length;
   const countFamilia = interviews.filter((i) => i.roteiro === 'D').length;
-  const countClinica = interviews.filter((i) => i.roteiro === 'G').length;
+  const countClinica = interviews.filter((i) => i.roteiro === 'F').length;
 
   // Cidades únicas entrevistadas
   const municipiosUnicos = Array.from(new Set(interviews.map((i) => i.municipio.trim()).filter(Boolean)));

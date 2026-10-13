@@ -58,7 +58,7 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
 
   // Perfil identificado pelo Roteiro
   const isFamily = selectedRoteiro === 'D' || selectedRoteiro === 'E';
-  const isClinic = selectedRoteiro === 'G';
+  const isClinic = selectedRoteiro === 'F';
   const isManagement = selectedRoteiro === 'B';
 
   // Campos Gerais
@@ -151,7 +151,7 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
         }, {} as Record<string, boolean>),
         checklistNotes: answers,
         hipotesesTestadas:
-          selectedRoteiro === 'G'
+          selectedRoteiro === 'F'
             ? ['HS1', 'HS2', 'HS3', 'HS4', 'HS5']
             : selectedRoteiro === 'B'
             ? ['H3', 'H4']
