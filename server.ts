@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import rateLimit from 'express-rate-limit';
 
 dotenv.config();
 
@@ -34,30 +35,7 @@ if (apiKey) {
 // Memória volátil apenas para trânsito transitório se necessário
 let transientSubmissions: any[] = [];
 
-// Rate limit em memória por IP para /api/transcribe-meet (máximo 10 requisições por hora)
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
-}
-const transcribeRateLimits = new Map<string, RateLimitEntry>();
 
-function checkTranscribeRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const ONE_HOUR = 60 * 60 * 1000;
-  const entry = transcribeRateLimits.get(ip);
-
-  if (!entry || now > entry.resetAt) {
-    transcribeRateLimits.set(ip, { count: 1, resetAt: now + ONE_HOUR });
-    return true;
-  }
-
-  if (entry.count >= 10) {
-    return false;
-  }
-
-  entry.count += 1;
-  return true;
-}
 
 // Endpoint de Health Check (apenas status, service e timestamp)
 app.get('/api/health', (req, res) => {
@@ -93,15 +71,23 @@ app.post('/api/forms/submit', (req, res) => {
   }
 });
 
-// Endpoint GET /api/forms/submissions: desabilitado (persistência no Firestore)
+// Endpoint GET /api/forms/submissions: desabilitado (segurança)
 app.get('/api/forms/submissions', (req, res) => {
-  return res.status(404).json({ error: 'Endpoint desabilitado. O CRM consome diretamente o Firestore.' });
+  return res.status(404).json({ error: 'Endpoint desabilitado.' });
+});
+
+// Rate limit em memória por IP para /api/transcribe-meet (máximo 10 requisições por hora)
+const transcribeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: { error: 'Limite de requisições excedido. Máximo de 10 transcrições por hora.' },
+  keyGenerator: (req) => req.ip || 'unknown'
 });
 
 // 2.8: Endpoint POST /api/transcribe-meet sanitizado com separação estrita de instrução e dados
 const GEMINI_CONFIG_MODEL = 'gemini-3.8-flash';
 
-app.post('/api/transcribe-meet', async (req, res) => {
+app.post('/api/transcribe-meet', transcribeLimiter, async (req, res) => {
   try {
     // 1. Validação de Origin
     const origin = (req.headers.origin as string) || '';
@@ -125,16 +111,6 @@ app.post('/api/transcribe-meet', async (req, res) => {
 
     if (!isOriginAllowed) {
       return res.status(403).json({ error: 'Acesso não autorizado: origem inválida.' });
-    }
-
-    // 2. Limite simples por IP (máximo 10 requisições por hora)
-    const clientIp =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-      req.socket.remoteAddress ||
-      'unknown';
-
-    if (!checkTranscribeRateLimit(clientIp)) {
-      return res.status(429).json({ error: 'Limite de requisições excedido. Máximo de 10 transcrições por hora.' });
     }
 
     const { transcriptText, fileName } = req.body;

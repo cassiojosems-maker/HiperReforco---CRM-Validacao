@@ -1,4 +1,4 @@
-export type RoteiroType = 'A' | 'B' | 'C' | 'D' | 'E' | 'G';
+export type RoteiroType = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
 
 export type HipoteseId =
   | 'H1'
@@ -99,6 +99,7 @@ export interface InterviewRecord {
   proximosPassos: string;
   tags?: string[];
   isExterna?: boolean; // Submetida via formulário público
+  isDemo?: boolean; // Dado de demonstração
 }
 
 export interface ProhibitedQuestion {

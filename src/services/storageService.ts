@@ -21,23 +21,33 @@ const CRM_COLLECTION = 'validacao_entrevistas';
 const RESPOSTAS_COLLECTION = 'validacao_respostas';
 const TOKENS_COLLECTION = 'validacao_tokens';
 
+export const HIDE_DEMO_KEY = 'hiperreforco_hide_demo';
+
 /**
  * Leitura de Cache Offline (mantido apenas como cache local temporário, nunca como fonte da verdade)
  */
 export function getStoredInterviews(): InterviewRecord[] {
   try {
+    const hideDemo = localStorage.getItem(HIDE_DEMO_KEY) === 'true';
     const raw = localStorage.getItem(STORAGE_CACHE_KEY);
+    
     if (!raw) {
-      return INITIAL_SEED_INTERVIEWS;
+      return hideDemo ? [] : INITIAL_SEED_INTERVIEWS.map(s => ({...s, isDemo: true}));
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) {
-      return INITIAL_SEED_INTERVIEWS;
+      return hideDemo ? [] : INITIAL_SEED_INTERVIEWS.map(s => ({...s, isDemo: true}));
     }
+    
+    // Se estiver ocultando demo, filtra os dados que são demo
+    if (hideDemo) {
+        return parsed.filter((item: InterviewRecord) => !item.isDemo);
+    }
+    
     return parsed;
   } catch (err) {
     console.warn('Falha ao ler cache offline do localStorage:', err);
-    return INITIAL_SEED_INTERVIEWS;
+    return INITIAL_SEED_INTERVIEWS.map(s => ({...s, isDemo: true}));
   }
 }
 
@@ -290,10 +300,23 @@ export async function listValidationTokens(): Promise<ValidationTokenData[]> {
   }
 }
 
+export function setHideDemoData(hide: boolean) {
+  localStorage.setItem(HIDE_DEMO_KEY, String(hide));
+}
+
+export function clearDemoData() {
+  const current = getStoredInterviews();
+  const filtered = current.filter((i) => !i.isDemo);
+  localStorage.setItem(STORAGE_CACHE_KEY, JSON.stringify(filtered));
+  setHideDemoData(true);
+  window.location.reload(); // Recarrega para limpar o estado da app
+}
+
 export function resetToSeedData(): InterviewRecord[] {
-  localStorage.setItem(STORAGE_CACHE_KEY, JSON.stringify(INITIAL_SEED_INTERVIEWS));
-  saveStoredInterviews(INITIAL_SEED_INTERVIEWS);
-  return INITIAL_SEED_INTERVIEWS;
+  localStorage.setItem(STORAGE_CACHE_KEY, JSON.stringify(INITIAL_SEED_INTERVIEWS.map(s => ({...s, isDemo: true}))));
+  setHideDemoData(false);
+  saveStoredInterviews(INITIAL_SEED_INTERVIEWS.map(s => ({...s, isDemo: true})));
+  return INITIAL_SEED_INTERVIEWS.map(s => ({...s, isDemo: true}));
 }
 
 /**

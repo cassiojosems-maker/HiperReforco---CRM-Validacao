@@ -26,7 +26,7 @@ import {
 import { Check, Info, Lock, ShieldAlert, KeyRound, AlertTriangle } from 'lucide-react';
 
 // 2.7 - Controle de ativação do formulário público externo reaberto após 2.4, 2.5 e 2.6
-const FORMULARIO_PUBLICO_ATIVO = true;
+const FORMULARIO_PUBLICO_ATIVO = false;
 
 export default function App() {
   const [interviews, setInterviews] = useState<InterviewRecord[]>([]);
