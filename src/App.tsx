@@ -9,6 +9,7 @@ import { HypothesisMatrixView } from './components/HypothesisMatrixView';
 import { ExecutiveReportView } from './components/ExecutiveReportView';
 import { InterviewDetailModal } from './components/InterviewDetailModal';
 import { MeetTranscriptionModal } from './components/MeetTranscriptionModal';
+import { EmailNotificationModal } from './components/EmailNotificationModal';
 import { AuthGate } from './components/AuthGate';
 import { InterviewRecord, StatusCRM, RoteiroType } from './types/validation';
 import {
@@ -84,6 +85,7 @@ export default function App() {
   const [activeRecord, setActiveRecord] = useState<InterviewRecord | null>(null);
   const [detailModalRecord, setDetailModalRecord] = useState<InterviewRecord | null>(null);
   const [isMeetModalOpen, setIsMeetModalOpen] = useState<boolean>(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Modo isolado de entrevistado (quando o link ?mode=form é acessado)
@@ -111,8 +113,8 @@ export default function App() {
       const validRoteiro = (['A', 'B', 'C', 'D', 'E', 'F'].includes(rot) ? rot : 'A') as RoteiroType;
       setRespondentRoteiro(validRoteiro);
 
-      // 2.4: Validação obrigatória de token único
-      const token = params.get('t');
+      // 2.4: Validação obrigatória de token único (aceita ?t= ou ?token=)
+      const token = params.get('t') || params.get('token');
       setRespondentToken(token);
 
       if (!token) {
@@ -328,6 +330,20 @@ export default function App() {
             <div className="text-[11px] font-mono text-slate-500 pt-2 border-t border-slate-800">
               Token: {respondentToken} · Consumido
             </div>
+            <button
+              onClick={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('mode');
+                url.searchParams.delete('roteiro');
+                url.searchParams.delete('t');
+                window.history.pushState({}, '', url.toString());
+                setIsRespondentMode(false);
+                setCurrentTab('crm');
+              }}
+              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition-colors border border-slate-700"
+            >
+              ← Voltar ao CRM
+            </button>
           </div>
         </div>
       );
@@ -348,6 +364,20 @@ export default function App() {
             <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3 text-xs text-slate-400 text-left">
               Para responder a esta pesquisa de campo, é necessário acessar o link exclusivo com token individual gerado pela equipe de pesquisa.
             </div>
+            <button
+              onClick={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('mode');
+                url.searchParams.delete('roteiro');
+                url.searchParams.delete('t');
+                window.history.pushState({}, '', url.toString());
+                setIsRespondentMode(false);
+                setCurrentTab('crm');
+              }}
+              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition-colors border border-slate-700"
+            >
+              ← Voltar ao CRM
+            </button>
           </div>
         </div>
       );
@@ -397,6 +427,7 @@ export default function App() {
             onSelectTab={setCurrentTab}
             onNewInterview={handleNewInterview}
             onOpenMeetModal={() => setIsMeetModalOpen(true)}
+            onOpenEmailModal={() => setIsEmailModalOpen(true)}
             onExportCsv={handleExportCsv}
             onExportJson={handleExportJson}
             onResetSeed={handleResetSeed}
@@ -443,6 +474,7 @@ export default function App() {
                 onSubmitExternal={handleSubmitExternal}
                 onOpenLiveChecklist={handleOpenLive}
                 onViewRecord={(item) => setDetailModalRecord(item)}
+                onOpenEmailConfig={() => setIsEmailModalOpen(true)}
                 recentExternalSubmissions={interviews.filter(
                   (i) => i.isExterna || i.tags?.includes('Formulário Externo')
                 )}
@@ -477,6 +509,13 @@ export default function App() {
             isOpen={isMeetModalOpen}
             onClose={() => setIsMeetModalOpen(false)}
             onTranscriptionLoaded={handleMeetTranscriptionLoaded}
+          />
+
+          {/* Modal de Configurações e Auditoria de Notificações por E-mail (EmailJS) */}
+          <EmailNotificationModal
+            isOpen={isEmailModalOpen}
+            onClose={() => setIsEmailModalOpen(false)}
+            onToast={showToast}
           />
 
           {/* Modal Seguro de Confirmação de Exclusão */}

@@ -12,6 +12,7 @@ import {
   Video,
   LogOut,
   UserCheck,
+  Mail,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -19,6 +20,7 @@ interface HeaderProps {
   onSelectTab: (tab: 'crm' | 'live' | 'form' | 'matriz' | 'relatorio') => void;
   onNewInterview: () => void;
   onOpenMeetModal: () => void;
+  onOpenEmailModal?: () => void;
   onExportCsv: () => void;
   onExportJson: () => void;
   onResetSeed: () => void;
@@ -32,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectTab,
   onNewInterview,
   onOpenMeetModal,
+  onOpenEmailModal,
   onExportCsv,
   onExportJson,
   onResetSeed,
@@ -163,6 +166,17 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden xl:inline">Exportar CSV (BOM)</span>
             </button>
 
+            {onOpenEmailModal && (
+              <button
+                onClick={onOpenEmailModal}
+                className="flex items-center gap-1.5 rounded-lg border border-sky-500/50 bg-sky-950/40 hover:bg-sky-900/50 px-2.5 py-1.5 text-xs font-bold text-sky-200 transition-colors shadow-sm"
+                title="Configurações de Notificação por E-mail (EmailJS)"
+              >
+                <Mail className="h-3.5 w-3.5 text-sky-400" />
+                <span className="hidden xl:inline">Alertas E-mail</span>
+              </button>
+            )}
+
             <div className="relative group">
               <button
                 className="flex items-center justify-center h-8 w-8 rounded-lg border border-slate-700 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
@@ -170,7 +184,16 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
-              <div className="absolute right-0 top-full mt-1.5 hidden group-hover:block w-48 rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-xl shadow-black/50 z-50">
+              <div className="absolute right-0 top-full mt-1.5 hidden group-hover:block w-52 rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-xl shadow-black/50 z-50">
+                {onOpenEmailModal && (
+                  <button
+                    onClick={onOpenEmailModal}
+                    className="w-full text-left px-3 py-2 text-xs text-sky-300 hover:bg-sky-950/40 rounded-lg transition-colors flex items-center justify-between mb-1"
+                  >
+                    <span>Notificações E-mail</span>
+                    <Mail className="h-3 w-3 text-sky-400" />
+                  </button>
+                )}
                 <button
                   onClick={onExportJson}
                   className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 rounded-lg transition-colors flex items-center justify-between"

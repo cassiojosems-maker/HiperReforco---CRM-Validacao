@@ -100,6 +100,7 @@ export interface InterviewRecord {
   tags?: string[];
   isExterna?: boolean; // Submetida via formulário público
   isDemo?: boolean; // Dado de demonstração
+  token?: string; // Token de convite exclusivo associado
 }
 
 export interface ProhibitedQuestion {

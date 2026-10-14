@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { RoteiroType, InterviewRecord } from '../types/validation';
 import { ROTEIROS_CONFIG } from '../data/cadernoData';
 import { submitPublicFormToFirestore } from '../services/storageService';
+import { sendSubmissionNotification } from '../services/emailService';
 import {
   Sparkles,
   Send,
@@ -196,6 +197,13 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
         token
       );
 
+      // Dispara notificação automática por e-mail para a equipe HiperReforço com resumo executivo
+      try {
+        await sendSubmissionNotification(newRecord, token);
+      } catch (notifyErr) {
+        console.warn('Aviso: falha não impeditiva no disparo do e-mail de notificação:', notifyErr);
+      }
+
       // Notifica callback do App
       await onSubmit(newRecord);
       setIsSubmitted(true);
@@ -225,11 +233,22 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
               </span>
             </div>
           </div>
-          {token && (
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-2.5 py-1 rounded-full border border-slate-700">
-              Convite Individual Ativo
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {token && (
+              <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-2.5 py-1 rounded-full border border-slate-700">
+                Convite Individual Ativo
+              </span>
+            )}
+            {onAdminReturn && (
+              <button
+                type="button"
+                onClick={onAdminReturn}
+                className="text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-xl border border-slate-700 transition-colors shadow-sm"
+              >
+                ← Voltar ao CRM
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -362,11 +381,16 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
               </div>
 
               {/* =======================================================
-                  BLOCO 1: IDENTIFICAÇÃO DINÂMICA CONFORME O PERFIL
+                  BLOCO DE CAMPOS CONDICIONADO AO TERMO DE CONSENTIMENTO
+                  (Uso de fieldset disabled garante bloqueio nativo do Tab)
                  ======================================================= */}
-              {isFamily ? (
-                /* === PERFIL FAMÍLIA (ROTEIROS D E E) === */
-                <div className={`rounded-2xl border border-pink-500/30 bg-slate-900/90 p-6 shadow-xl space-y-4 transition-opacity ${!consentAccepted ? 'opacity-50 pointer-events-none' : ''}`}>
+              <fieldset disabled={!consentAccepted} className="space-y-6 m-0 p-0 border-0 min-w-0">
+                {/* =======================================================
+                    BLOCO 1: IDENTIFICAÇÃO DINÂMICA CONFORME O PERFIL
+                   ======================================================= */}
+                {isFamily ? (
+                  /* === PERFIL FAMÍLIA (ROTEIROS D E E) === */
+                  <div className={`rounded-2xl border border-pink-500/30 bg-slate-900/90 p-6 shadow-xl space-y-4 transition-opacity ${!consentAccepted ? 'opacity-50 pointer-events-none' : ''}`}>
                   <div className="border-b border-slate-800 pb-2">
                     <h2 className="text-sm font-bold text-white flex items-center gap-2">
                       <Users className="h-4 w-4 text-pink-400" />
@@ -699,6 +723,7 @@ export const PublicRespondentView: React.FC<PublicRespondentViewProps> = ({
                   )}
                 </div>
               </div>
+              </fieldset>
 
               {/* Alerta de Erro no Envio */}
               {submitError && (

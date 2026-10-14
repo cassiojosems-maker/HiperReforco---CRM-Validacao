@@ -19,12 +19,14 @@ import {
   KeyRound,
   ShieldCheck,
   RefreshCw,
+  Mail,
 } from 'lucide-react';
 
 interface PublicFormViewProps {
   onSubmitExternal: (record: InterviewRecord) => void;
   onOpenLiveChecklist?: (record: InterviewRecord) => void;
   onViewRecord?: (record: InterviewRecord) => void;
+  onOpenEmailConfig?: () => void;
   recentExternalSubmissions?: InterviewRecord[];
 }
 
@@ -32,6 +34,7 @@ export const PublicFormView: React.FC<PublicFormViewProps> = ({
   onSubmitExternal,
   onOpenLiveChecklist,
   onViewRecord,
+  onOpenEmailConfig,
   recentExternalSubmissions = [],
 }) => {
   const [selectedRoteiro, setSelectedRoteiro] = useState<RoteiroType>('F');
@@ -116,6 +119,36 @@ export const PublicFormView: React.FC<PublicFormViewProps> = ({
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
+      {/* Banner de Notificações por E-mail (EmailJS) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-sky-500/30 bg-gradient-to-r from-sky-950/40 via-slate-900 to-indigo-950/30 shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/20 border border-sky-500/40 text-sky-400 shrink-0">
+            <Mail className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-bold text-white">Notificações Automáticas por E-mail (EmailJS)</h3>
+              <span className="rounded-full bg-emerald-950 text-emerald-400 border border-emerald-700/60 px-2 py-0.5 text-[9px] font-mono font-bold uppercase">
+                Ativo
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-300">
+              Cada submissão externa dispara automaticamente um resumo executivo da entrevista para a equipe.
+            </p>
+          </div>
+        </div>
+
+        {onOpenEmailConfig && (
+          <button
+            onClick={onOpenEmailConfig}
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-900/40 hover:bg-sky-800/60 px-3.5 py-2 text-xs font-bold text-sky-200 transition-colors shadow-sm shrink-0"
+          >
+            <Mail className="h-3.5 w-3.5 text-sky-300" />
+            <span>Configurar / Testar E-mail</span>
+          </button>
+        )}
+      </div>
+
       {/* Caixa de Geração e Envio de Links por Roteiro */}
       <div className="rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-slate-900 via-indigo-950/20 to-slate-900 p-6 shadow-xl space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
@@ -252,7 +285,17 @@ export const PublicFormView: React.FC<PublicFormViewProps> = ({
                 className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3.5 py-2 text-xs font-bold text-slate-300 transition-colors"
               >
                 <ExternalLink className="h-3.5 w-3.5 text-indigo-400" />
-                <span>Abrir e Testar no Navegador</span>
+                <span>Abrir em Nova Aba</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  window.location.search = `?mode=form&roteiro=${selectedRoteiro}&t=${generatedToken}`;
+                }}
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 text-xs font-bold text-white transition-colors shadow-md shadow-emerald-600/30"
+              >
+                <Eye className="h-3.5 w-3.5 text-white" />
+                <span>Abrir e Testar Aqui Nesta Tela</span>
               </button>
             </div>
           </div>

@@ -76,12 +76,34 @@ app.get('/api/forms/submissions', (req, res) => {
   return res.status(404).json({ error: 'Endpoint desabilitado.' });
 });
 
+// Endpoint POST /api/notify-email (recebe auditoria de notificação de e-mail)
+app.post('/api/notify-email', (req, res) => {
+  try {
+    const { recordId, roteiro, entrevistadoNome, municipio, toEmail, token, summaryText } = req.body || {};
+    const timestamp = new Date().toISOString();
+    console.info(
+      `[NOTIFICAÇÃO E-MAIL] Submissão ${recordId || 'N/A'} (Roteiro ${roteiro || '?'}) recebida para ${toEmail || 'equipe'}. Respondente: ${entrevistadoNome || 'Anônimo'} (${municipio || 'N/A'}). Token: ${token || 'N/A'}`
+    );
+    return res.json({
+      success: true,
+      logged: true,
+      timestamp,
+      recipient: toEmail,
+    });
+  } catch (error: any) {
+    console.warn('Erro ao processar log de notificação no servidor:', error);
+    return res.status(200).json({ success: false, error: 'Falha não fatal de log' });
+  }
+});
+
 // Rate limit em memória por IP para /api/transcribe-meet (máximo 10 requisições por hora)
 const transcribeLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
   message: { error: 'Limite de requisições excedido. Máximo de 10 transcrições por hora.' },
-  keyGenerator: (req) => req.ip || 'unknown'
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  validate: false,
 });
 
 // 2.8: Endpoint POST /api/transcribe-meet sanitizado com separação estrita de instrução e dados

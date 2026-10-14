@@ -60,6 +60,12 @@
     "/validacao_tokens/{token}": {
       "schema": "ValidationToken",
       "description": "Tokens de uso único"
+    },
+    "/validacao_notificacoes/{id}": {
+      "description": "Registro de auditoria de notificações enviadas por e-mail"
+    },
+    "/validacao_config/{docId}": {
+      "description": "Configurações do sistema como chaves e destinatários de e-mail"
     }
   }
 }

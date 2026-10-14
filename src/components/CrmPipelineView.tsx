@@ -227,7 +227,7 @@ export const CrmPipelineView: React.FC<CrmPipelineViewProps> = ({
               <option value="C">Roteiro C · Piloto Real</option>
               <option value="D">Roteiro D · Família B2C</option>
               <option value="E">Roteiro E · Aluno Típico (H6)</option>
-              <option value="G">Roteiro G · Clínica / Saúde</option>
+              <option value="F">Roteiro F · Clínica / Saúde</option>
             </select>
 
             <select
