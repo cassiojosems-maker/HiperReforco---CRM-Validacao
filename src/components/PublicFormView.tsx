@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   RefreshCw,
   Mail,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface PublicFormViewProps {
@@ -61,10 +62,32 @@ export const PublicFormView: React.FC<PublicFormViewProps> = ({
     loadTokens();
   }, []);
 
+  const [customBaseUrl, setCustomBaseUrl] = useState<string>(() => {
+    try {
+      return localStorage.getItem('hiperreforco_custom_base_url') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [isEditingBaseUrl, setIsEditingBaseUrl] = useState<boolean>(false);
+
+  // URL base efetiva
+  const effectiveBaseUrl = customBaseUrl.trim() || `${window.location.origin}${window.location.pathname}`;
+  const isDevUrl = effectiveBaseUrl.includes('ais-dev-');
+
   // URL tokenizada única
   const activeUrl = generatedToken
-    ? `${window.location.origin}${window.location.pathname}?mode=form&roteiro=${selectedRoteiro}&t=${generatedToken}`
+    ? `${effectiveBaseUrl.replace(/\/$/, '')}/?mode=form&roteiro=${selectedRoteiro}&t=${generatedToken}`
     : '';
+
+  const handleSaveCustomBaseUrl = (url: string) => {
+    setCustomBaseUrl(url);
+    try {
+      localStorage.setItem('hiperreforco_custom_base_url', url.trim());
+    } catch {
+      // ignore
+    }
+  };
 
   // Gerar novo token para a entrevista
   const handleGenerateToken = async () => {
@@ -298,6 +321,64 @@ export const PublicFormView: React.FC<PublicFormViewProps> = ({
                 <span>Abrir e Testar Aqui Nesta Tela</span>
               </button>
             </div>
+
+            {/* Alerta de Link ais-dev vs URL Pública */}
+            {isDevUrl && (
+              <div className="rounded-xl border border-amber-500/50 bg-amber-950/40 p-3.5 space-y-2 text-xs">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-amber-300">
+                      Importante: Link com prefixo "ais-dev-" é restrito ao seu navegador de desenvolvimento!
+                    </span>
+                    <p className="text-[11px] text-amber-200/90 mt-0.5 leading-relaxed">
+                      Se você enviar uma URL contendo <code>ais-dev-</code> pelo WhatsApp, pessoas externas serão barradas pela tela <strong>aistudio.google.com/404 (Page Not Found)</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-500/30 text-[11px]">
+                  <span className="text-amber-200 font-medium">Solução para envio público:</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingBaseUrl(!isEditingBaseUrl)}
+                    className="rounded bg-amber-500/20 hover:bg-amber-500/30 px-2 py-0.5 font-bold text-amber-200 border border-amber-500/40 transition-colors"
+                  >
+                    {isEditingBaseUrl ? 'Fechar Configuração de Domínio' : 'Definir Domínio Público de Produção'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Editor de Domínio Público */}
+            {isEditingBaseUrl && (
+              <div className="rounded-xl border border-slate-700 bg-slate-900/90 p-3.5 space-y-2 text-xs">
+                <label className="block text-xs font-bold text-slate-200">
+                  URL Base Pública para Disparo aos Entrevistados (WhatsApp)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={customBaseUrl}
+                    onChange={(e) => handleSaveCustomBaseUrl(e.target.value)}
+                    placeholder="ex: https://meudominio.com ou URL pública do Cloud Run"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950 text-xs font-mono text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
+                  />
+                  {customBaseUrl && (
+                    <button
+                      type="button"
+                      onClick={() => handleSaveCustomBaseUrl('')}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-700 text-[11px] text-slate-400 hover:text-white"
+                    >
+                      Resetar
+                    </button>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Quando preenchido, os links gerados para o WhatsApp usarão essa URL pública em vez de <code>ais-dev-</code>.
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 p-6 text-center space-y-2">
